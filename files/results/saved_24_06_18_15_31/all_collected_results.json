@@ -1,0 +1,142 @@
+{
+    "metadata": {
+        "types": [
+            "search",
+            "shopping",
+            "images"
+        ],
+        "time": "24_06_18_15_31",
+        "count_by_type": {
+            "search": 10,
+            "shopping": 10,
+            "images": 50
+        },
+        "input_items": 2,
+        "payload": {
+            "location": "United States",
+            "gl": "us",
+            "hl": "en"
+        }
+    },
+    "products": {
+        "https://www.autozone.com/cooling-heating-and-climate-control/thermostat/p/duralast-thermostat-10107/1281712_0_0": {
+            "query": "AutoZone Thermostat 10107 site:",
+            "original": {
+                "id": "14",
+                "part_number": "1010-170",
+                "long_desc": "Integrated Housing Thermostat-170 Degrees with thermostat, housing and seal",
+                "marketing_desc": "Manufactured to the highest OEM quality standards by an OE Supplier, using proprietary material to stand up to even the most demanding automotive cooling systems. Thermal shock validated and 100% leak tested",
+                "features": [
+                    "High grade stainless steel and copper construction",
+                    "Meets or exceeds OEM standards",
+                    "Consistent and precise response to cooling system needs",
+                    "Original equipment design for worry-free direct fit replacement",
+                    "100% tested and calibrated",
+                    ""
+                ],
+                "padb": {
+                    "Bleeder Hole": "Yes ",
+                    "Color": "Black ",
+                    "Gasket Or Seal Included": "Yes ",
+                    "Grade Type": "Regular ",
+                    "Material": "Plastic, Stainless Steel, Copper ",
+                    "Mounting Hardware Included": "No ",
+                    "Mounting Hole Quantity": "3",
+                    "Outlet Port Quantity": "2"
+                },
+                "attributes": false,
+                "interchange": "FR3Z8575B",
+                "major": "Thermostat",
+                "minor": "Thermostat w/ Housing",
+                "360_view_url": "https://www.saasphoto.com/share/PaSfVF/1010-170/1010-170.html",
+                "angle_view": "images/1010-170_Angle.jpg",
+                "top_view": "images/1010-170_Top.jpg",
+                "right_view": "images/1010-170_Right.jpg",
+                "left_view": "images/1010-170_Left.jpg",
+                "bottom_view": "images/1010-170_Bottom.jpg",
+                "front_view": "images/1010-170_Front.jpg",
+                "back_view": "images/1010-170_Back.jpg",
+                "major_slug": "thermostat",
+                "minor_slug": "thermostat-w-housing",
+                "motorad_part_number": "1010-170",
+                "motorad_part_description": null,
+                "motorad_part_main_components": null,
+                "motorad_part_main_features": null,
+                "motorad_interchange": null,
+                "motorad_interchange_oem_car_models_": null,
+                "motorad_part_image_angle": null,
+                "motorad_part_image_front": null,
+                "motorad_part_image_right_": null,
+                "competitor_name": "AutoZone",
+                "competitor_brand_name": null,
+                "competitor_cross-list_part_number": "10107",
+                "competitor_parts_description": null,
+                "competitor_cross-list_sku": null,
+                "competitor_part_main_components": null,
+                "competitor_part_main_features": null,
+                "competitor_interchange": null,
+                "competitor_interchange_oem_car_models_": null,
+                "competitor_web_domain": null,
+                "column1": null,
+                "column2": null,
+                "column3": null,
+                "unnamed:_22": null,
+                "unnamed:_23": null
+            },
+            "search": {
+                "title": "Duralast Thermostat 10107",
+                "link": "https://www.autozone.com/cooling-heating-and-climate-control/thermostat/p/duralast-thermostat-10107/1281712_0_0",
+                "snippet": "Manufactured with OEM quality materials and safety standards by an OE Supplier. This thermostat will meet and exceed the expectations of the OE thermostat to ...",
+                "currency": "$",
+                "price": 52.99,
+                "position": 1
+            },
+            "jina_scrape": {
+                "name": "Duralast Thermostat",
+                "product_number": "10107",
+                "sku": "",
+                "description": "",
+                "material": "",
+                "temperature": "",
+                "connector": "",
+                "type": "Thermostat",
+                "sub_type": "",
+                "pins": "",
+                "include_housing": "",
+                "include_gaskets": false,
+                "features": "",
+                "compatibility": "",
+                "price": "",
+                "currency": "",
+                "oem": "",
+                "car_model": "",
+                "cross_reference": [],
+                "additional_data": "Your Opt Out Preference Signal is Honored. Do Not Sell or Share My Personal Data.",
+                "detail_desc": "Duralast Thermostat 10107 available at AutoZone."
+            },
+            "serper_scrape": {
+                "name": "Duralast Thermostat 10107",
+                "product_number": "10107",
+                "sku": "",
+                "description": "Manufactured with OEM quality materials and safety standards by an OE Supplier. This thermostat will meet and exceed the expectations of the OE thermostat to insure the best product for your cooling system. Stands up to even the most demanding automotive cooling systems. Manufactured with OEM specifications and processes. Copper case and wax compound assures rapid response to temperature changes in the coolant. Offset design, air relief valve, and OEM style seals included where applicable.",
+                "material": "High grade stainless steel and copper",
+                "temperature": "",
+                "connector": "",
+                "type": "Thermostat",
+                "sub_type": "",
+                "pins": "",
+                "include_housing": "",
+                "include_gaskets": false,
+                "features": "100% tested and calibrated, Consistent and precise response to cooling system needs, Original equipment design for worry-free direct fit replacement, Meets or exceeds OEM standards",
+                "compatibility": "",
+                "price": "",
+                "currency": "",
+                "oem": "OE Supplier",
+                "car_model": "",
+                "cross_reference": [],
+                "additional_data": "",
+                "detail_desc": "Manufactured with OEM specifications and processes. Copper case and wax compound assures rapid response to temperature changes."
+            }
+        }
+    }
+}
