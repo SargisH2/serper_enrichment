@@ -23,7 +23,6 @@
 ###
 # function vision comparision to compare first 5 products with 1-2 image comparisions # TODO 1906
 
-
 # search steps
 """"
 run search 10 results, images 20 results
@@ -138,7 +137,7 @@ prooduct_json_schema = {
         "description": "Detailed product description without all cross-references, in 20 words",
     }
 }
-required_keys = ["name", "product_number", "sku", "description"]
+required_keys = ["brand_name", "product_number"]
 
 images_schema = {
     "images_similarity_score": "a number representing how the items are similar in percents, from 0 to 100",
@@ -196,7 +195,7 @@ with open(all_data_file_from_motorad, 'r') as file:
 serper_scrape_limit_by_result_position = 1
 serper_base_url = "https://google.serper.dev/"
 content_types = ['search', 'images']
-serper_limit = 1 # Filter items to search wiith serper. Set to 0 to search all products
+serper_limit = 5 # Filter items to search wiith serper. Set to 0 to search all products
 
 # template for serper search. Used in function get_query. 
 query_template = """{brand_name} {major} {company_num} site:{website}"""
@@ -206,8 +205,7 @@ results_count_by_content_type = {
     'search': 10,
     'shopping': 10,
     'images': 50
-} # AK: Need to bee different 'search' = 10  'shopping' = 10, 'images'= 50]  
-    # Fixed 18.06
+}
     
 serper_key = os.environ['SERPER_API_KEY']
 headers_search_preferences = {
@@ -222,8 +220,10 @@ serper_headers = {
 }
 
 ## oai options
+os.environ['OPENAI_API_KEY'] = os.environ['PROJECT_OAI_KEY']#################################################
 gpt_model = 'gpt-4o'
 oai_key = os.environ['OPENAI_API_KEY']
+similarity_limit_by_source = 2
     
 
 ###################### Define functions
@@ -267,7 +267,7 @@ def get_product_unstructured_data_to_json(schema, data, model = gpt_model)->dict
         result = json.loads(result) 
         return result if isinstance(result, dict) else dict()
     except:
-        return result
+        return dict()
 
 
 # function to scrape url and validate
@@ -276,18 +276,26 @@ def scrape_item(
         source: dict, 
         schema: dict = prooduct_json_schema, 
         required_keys:list = required_keys,
-    ) -> dict:
+    ) -> tuple:
     results = {
         'jina_scrape': {},
-        'serper_scrape': {}
+        'serper_scrape': {},
+        'serper_requests': 0,
+        'gpt_requests': 0,
+        'gpt_errors': 0,
     }
     
     jina_page_text = scrape_url(url, method = 'jina')
-    jina_page_json = get_product_unstructured_data_to_json(
-        schema= schema,
-        data = jina_page_text
-    )
-    results['jina_scrape'] = jina_page_json
+    try:
+        results['gpt_requests'] += 1
+        jina_page_json = get_product_unstructured_data_to_json(
+            schema= schema,
+            data = jina_page_text
+        )
+        results['jina_scrape'] = jina_page_json
+    except:
+        jina_page_json = {}
+        results['gpt_errors'] += 1
     
     for required_key in required_keys:
         if not isinstance(jina_page_json, dict) or not jina_page_json.get(required_key):
@@ -295,12 +303,17 @@ def scrape_item(
     else: # works if not break
         return results
     
+    results['serper_requests'] += 1
     serper_page_text = scrape_url(url, method='serper')
-    serper_page_json = get_product_unstructured_data_to_json(
-        schema= schema,
-        data = serper_page_text
-    )
-    results['serper_scrape'] = serper_page_json
+    try:
+        results['gpt_requests'] += 1
+        serper_page_json = get_product_unstructured_data_to_json(
+            schema= schema,
+            data = serper_page_text
+        )
+        results['serper_scrape'] = serper_page_json
+    except:
+        results['gpt_errors'] += 1
     
     return results
 
@@ -409,9 +422,9 @@ def merge_table_and_json(table: pd.DataFrame) -> list:
             data_temp = motorad_data.copy()  # don't modify the original data
             for col_name in row.index:  # row.index is a list-like object with column names
                 key = to_name(col_name)
-                value = str(row[col_name])
+                value = row[col_name]
                 data_temp.update({  # add table data to the Motorad dict, every column as a key
-                    key: value if not pd.isna(value) else None
+                    key: str(value) if not pd.isna(value) else None
                 })
             data_to_use.append(data_temp)
             
@@ -432,14 +445,22 @@ def get_query(item: dict, template: Literal['shopping', 'default'] = 'default') 
         str: A formatted query string.
     """
     if template == 'shopping':
-        content:dict = item.get('serper_scrape') or item.get('jina_scrape')
+        content:dict = item.get('serper_scrape') or item.get('jina_scrape') or dict()
         # original:dict = item.get('original') 
         
-        query = shopping_query_template.format(
-            product_description = content.get('description'),
-            brand = content.get('brand_name') or item.get('competitor_brand_name') or item.get('competitor_name'),
-            part_number = content.get('product_number') or '',
-            sku = content.get('sku') or ''
+        # query = shopping_query_template.format(
+        #     product_description = content.get('description'),
+        #     brand = content.get('brand_name') or item.get('competitor_brand_name') or item.get('competitor_name'),
+        #     part_number = content.get('product_number') or '',
+        #     sku = content.get('sku') or ''
+        # ) ##### commented 20.06
+        query = query_template.format(
+            brand_name = content.get('brand_name') or item.get('competitor_brand_name') or item.get('competitor_name') or '',
+            major = item.get('major') or '',
+            minor = item.get('minor') or '',
+            long_desc = item.get('long_desc') or '',
+            company_num = content.get('product_number') or item.get('competitor_cross-list_part_number') or '',
+            website = item.get('competitor_web_domain') or ""
         )
     else:
         query = query_template.format(
@@ -467,10 +488,11 @@ def get_item_search_result(
     original_item (dict): Original item dictionary.
 
     Returns:
-    dict: Dictionary containing search results.
+    tuple: dict: Dictionary containing search results, int:requests count.
     """
+    counter = 0
     if not isinstance(query, str):
-        return None
+        return None, counter
     
     payload_with_query =  headers_search_preferences.copy() # avoid editing the original payload template
     payload_with_query['q'] = query
@@ -486,6 +508,7 @@ def get_item_search_result(
         payload['num'] = results_count_by_content_type.get(content_type) or 10
         payload = json.dumps(payload)
         try:
+            counter += 1
             response = requests.request("POST", serper_url, headers=serper_headers, data=payload)
             response_obj: dict = response.json()
         except Exception as e:
@@ -495,14 +518,14 @@ def get_item_search_result(
         response_values = list(response_obj.values())
         result[content_type] = response_values[1] # 0 is {SearchParameters}
         
-    return result
+    return result, counter
 
 
 # function to search with serper. For all items. The result will be saved in a json file
 def get_all_items_search_results(
             items_to_search: list,
             content_types: list = content_types,
-            serper_limit: int = 2
+            serper_limit: int = serper_limit
         ) -> dict:
     """
     Search with Serper for all items and save the results in a JSON file.
@@ -518,21 +541,25 @@ def get_all_items_search_results(
     Returns:
         dict: A dictionary containing the metadata and collected search results.
     """
-    collected = []
+    collected = []    
     total = serper_limit or len(items_to_search)
-    for item in tqdm(items_to_search[:total]):
-        query = get_query(item)
-        results = get_item_search_result(query, item, content_types)
-        if results:
-            collected.append(results)
-        
+    
     metadata = {
         'types': content_types,
         'time': current_timestamp,
         'count_by_type': results_count_by_content_type,
         'input_items': total,
-        'payload': headers_search_preferences
+        'payload': headers_search_preferences,
+        'serper_requests': 0,
+        'gpt_requests': 0,
+        'gpt_errors': 0
     }
+    for item in tqdm(items_to_search[:total]):
+        query = get_query(item)
+        results, count = get_item_search_result(query, item, content_types)
+        metadata['serper_requests'] += count
+        if results:
+            collected.append(results)
     
     final_results = {
         'metadata': metadata,
@@ -591,47 +618,65 @@ def filter_sources(search_results: dict) -> dict:
 
 
 # add shopping search results 
-def add_shopping_results(item: dict) -> None:
+def add_shopping_results(item: dict) -> int: # retuens requests count
     shopping_query = get_query(
         item,
         template = 'shopping'
     )
-    shopping_content = get_item_search_result(
+    
+    shopping_content, count = get_item_search_result(
         query = shopping_query,
         original_item = None,
         content_types = ['shopping']
     )
-    item['shopping_query'] = shopping_query
     item['shopping'] = shopping_content['shopping']
-# get car models autozone # TODO 1908
+    return count
 
     
 # function to return collected all results
 def all_results_with_page_content(search_results: dict, content_types:list) -> dict:
     collected_items =  search_results['collected']
-    count = 1
+    total = len(collected_items)
+    metadata = search_results['metadata']
     items_by_url = dict()
-    for item in collected_items:
+    for i, item in enumerate(collected_items):
+        print(f'item: {i+1}/{total}')
         for content_type in content_types:
+            print('content type:', content_type)
             sources = item[content_type] or []
             sources = sources[:serper_scrape_limit_by_result_position] # AK fix 19.06
             for source in sources:
-                print('\rpage N', count, end='')
-                count += 1
+                gpt_resp =  get_product_unstructured_data_to_json(prooduct_json_schema, str(source))
+                source['gpt_response'] = gpt_resp
                 link = source['link'].split('?')[0].strip('/') # get url main part
+                
+                serper_req_count = 0
+                for key in required_keys:
+                    if not gpt_resp.get(key):
+                        scraping_result = scrape_item(link, source = source)
+                        source.update({
+                            'jina_scrape': scraping_result['jina_scrape'],
+                            'serper_scrape': scraping_result['serper_scrape'],
+                        })
+                        metadata['gpt_requests'] += scraping_result['gpt_requests']
+                        metadata['gpt_errors'] += scraping_result['gpt_errors']
+                        serper_req_count += scraping_result['serper_requests']
+                        
                 if items_by_url.get(link): # if duplicated, update with new content_type
-                    items_by_url[link][content_type] = source
+                    if items_by_url[link].get(content_type):
+                        items_by_url[link][content_type].append(source)
+                    else:
+                        items_by_url[link][content_type] = [source]
                 else: # else create new key-link and get page data
                     items_by_url[link] = {
                         'query': item['query'],
                         'original': item['original'],
-                        content_type: source
+                        content_type: [source]
                     }
-
-                    page_data_dict = scrape_item(link, source = source)
-                    items_by_url[link].update(page_data_dict)
-                    add_shopping_results(items_by_url[link])
-    
+                    serper_req_count_shopping = add_shopping_results(items_by_url[link]) # results added inside, returns count only
+                    serper_req_count += serper_req_count_shopping
+                    metadata['serper_requests'] += serper_req_count
+                    
     print()
     final_schema = {
         'metadata': search_results['metadata'],
@@ -703,6 +748,37 @@ def images_prompt(prompt: str, *urls: str) -> str:
     
     return response.choices[0].message.content
 
+
+# function tf rcomparing images
+def image_similarity(result_with_page_contents, content_types_for_simil):
+    metadata = result_with_page_contents['metadata']
+    for item in result_with_page_contents['products'].values(): # keys are links
+        original_image = item['original'].get('angle_view')
+        if not original_image: continue
+        original_image = original_image.replace('images/', 'https://images.motorad.com/MotoRad-stills/')
+        item_sources = []
+        for source_type in content_types_for_simil:
+            sources = item.get(source_type) or []
+            sources = sources[:similarity_limit_by_source]
+            for source in sources:
+                source_image = source.get('imageUrl')
+                if not source_image: continue
+                
+                metadata['gpt_requests'] += 1
+                try:
+                    img_similarity_result = json.loads(
+                        images_prompt(
+                            img_similarity_prompt, 
+                            original_image, source_image
+                        )
+                    )
+
+                    source.update(img_similarity_result)
+                except:
+                    metadata['gpt_errors'] += 1
+    save_result(result_with_page_contents, file_to_save_enriched)
+    return result_with_page_contents
+                
     
 ###################### The Main function
 def main(
@@ -721,12 +797,13 @@ def main(
     print('Receiving page contents...')
     result_with_page_contents = all_results_with_page_content(search_results, content_types)
     
-    # print('Starting images similarity...')
-    # enriched_results = image_similarity(result_with_page_contents) #TODO 19.06: write the function
+    print('Starting images similarity...')
+    enriched_results = image_similarity(result_with_page_contents, content_types+['shopping'])
     
     print("Finished!")
-    return result_with_page_contents
+    return enriched_results
     
 ####
 result = main()
 print(result['metadata'])
+
