@@ -21,8 +21,7 @@
 
 
 ###
-# functions TODO 18.06: function to get all parameters from raw text dynamically
-# function vision comparision to compare first 5 products with 1-2 image comparisions
+# function vision comparision to compare first 5 products with 1-2 image comparisions # TODO 1906
 
 
 # search steps
@@ -54,6 +53,10 @@ prooduct_json_schema = {
     "product_number": {
         "type": "string",
         "description": "Product number of the product",
+    },
+    "brand_name": {
+        "type": "string",
+        "description": "Brand name of the product",
     },
     "sku": {
         "type": "string",
@@ -137,8 +140,24 @@ prooduct_json_schema = {
 }
 required_keys = ["name", "product_number", "sku", "description"]
 
+images_schema = {
+    "images_similarity_score": "a number representing how the items are similar in percents, from 0 to 100",
+    "info": "a snippet, providing key-points, why are similar and why not "
+}
+img_similarity_prompt = (
+            f"You are a expert in car parts classification."
+            f"our task is to compare images and send an answer-how much are the parts similar."
+            f"Don't compare images - like comparing size or quality"
+            f"images_similarity_score is a number representing how much these parts are similar in percents(from 0 to 100)"
+            f"info is a text snippet in 4 key points-why are the parts similar and why not"
+            f"Please respond with your analysis directly in JSON format "
+            f"(without using Markdown code blocks or any other formatting). "
+            f"The JSON schema should include: {images_schema}.")
+
+
 import os
 import json
+import base64
 import requests
 import pandas as pd
 from tqdm import tqdm
@@ -174,14 +193,15 @@ with open(all_data_file_from_motorad, 'r') as file:
     
 ###################### Serper and oai init
 ## serper options
-scrape_with_serper = True ############################################### Important
+serper_scrape_limit_by_result_position = 1
 serper_base_url = "https://google.serper.dev/"
-content_types = ['search', 'shopping', 'images']
-serper_limit = 2 # Filter items to search wiith serper. Set to 0 to search all products
+content_types = ['search', 'images']
+serper_limit = 1 # Filter items to search wiith serper. Set to 0 to search all products
 
 # template for serper search. Used in function get_query. 
 query_template = """{brand_name} {major} {company_num} site:{website}"""
 query_template_full = """("{brand_name} {major}" OR "{brand_name} {minor}" OR "{brand_name} {long_desc}") "{company_num}" "price" ("part" OR "Part #" OR "Part number") ("MPN" OR "Manufacturer Part Number" OR "SKU") (site:autozone.com OR site:{website} OR site:"")"""
+shopping_query_template = """{product_description} '{brand}' '{part_number}' sku '{sku}'"""
 results_count_by_content_type = {
     'search': 10,
     'shopping': 10,
@@ -208,7 +228,7 @@ oai_key = os.environ['OPENAI_API_KEY']
 
 ###################### Define functions
 # Function for scraping. Used before enrichment
-def scrape_url(url:str, method: Literal['jina', 'serper'] = 'jina')-> str: # 18.06: appended jina, optional.
+def scrape_url(url:str, method: Literal['jina', 'serper'] = 'jina')-> str:
     if method == 'jina':
         response = requests.get(f'https://r.jina.ai/{url}')
         return response.text
@@ -229,7 +249,7 @@ def scrape_url(url:str, method: Literal['jina', 'serper'] = 'jina')-> str: # 18.
 def get_product_unstructured_data_to_json(schema, data, model = gpt_model)->dict: # AK
     system_message = (
         f"You are a data analyst API."
-        f"Your task is to extract info from a raw text"
+        f"Your task is to extract info about the main product from a raw text. Identify and extract only data releated to the main part."
         f"Please respond with your analysis directly in JSON format "
         f"(without using Markdown code blocks or any other formatting). "
         f"If you can't find required keys in the text, just use empty text or empty list as a default value in the schema. "
@@ -242,9 +262,10 @@ def get_product_unstructured_data_to_json(schema, data, model = gpt_model)->dict
                 {"role": "user", "content": str(data)}
             ],
     )
-    result =  response.choices[0].message.content.strip()
+    result = response.choices[0].message.content.strip()
     try:
-        return json.loads(result)
+        result = json.loads(result) 
+        return result if isinstance(result, dict) else dict()
     except:
         return result
 
@@ -252,13 +273,15 @@ def get_product_unstructured_data_to_json(schema, data, model = gpt_model)->dict
 # function to scrape url and validate
 def scrape_item(
         url,
+        source: dict, 
         schema: dict = prooduct_json_schema, 
-        required_keys:list = required_keys
+        required_keys:list = required_keys,
     ) -> dict:
     results = {
         'jina_scrape': {},
         'serper_scrape': {}
     }
+    
     jina_page_text = scrape_url(url, method = 'jina')
     jina_page_json = get_product_unstructured_data_to_json(
         schema= schema,
@@ -267,9 +290,9 @@ def scrape_item(
     results['jina_scrape'] = jina_page_json
     
     for required_key in required_keys:
-        if not jina_page_json.get(required_key):
+        if not isinstance(jina_page_json, dict) or not jina_page_json.get(required_key):
             break
-    else: # works if not breaked
+    else: # works if not break
         return results
     
     serper_page_text = scrape_url(url, method='serper')
@@ -386,7 +409,7 @@ def merge_table_and_json(table: pd.DataFrame) -> list:
             data_temp = motorad_data.copy()  # don't modify the original data
             for col_name in row.index:  # row.index is a list-like object with column names
                 key = to_name(col_name)
-                value = row[col_name]
+                value = str(row[col_name])
                 data_temp.update({  # add table data to the Motorad dict, every column as a key
                     key: value if not pd.isna(value) else None
                 })
@@ -396,25 +419,37 @@ def merge_table_and_json(table: pd.DataFrame) -> list:
 
 
 # Create a query from the template for serper search
-def get_query(item: dict) -> str:
+def get_query(item: dict, template: Literal['shopping', 'default'] = 'default') -> str:
     """
     Create a search query from a template using the given item dictionary.
     This function takes a dictionary with various keys and formats a query string 
     based on the specified template.
     Args:
         item (dict): A dictionary containing the keys needed to fill the query template.
+        template: What template to use. One of ('shopping', 'default').
 
     Returns:
         str: A formatted query string.
     """
-    query = query_template.format(
-        brand_name = item.get('competitor_brand_name') or item.get('competitor_name'),
-        major = item.get('major'),
-        minor = item.get('minor'),
-        long_desc = item.get('long_desc'),
-        company_num = item.get('competitor_cross-list_part_number'), #AK Fixed 15.06.2024
-        website = item.get('competitor_web_domain') or ""
-    )
+    if template == 'shopping':
+        content:dict = item.get('serper_scrape') or item.get('jina_scrape')
+        # original:dict = item.get('original') 
+        
+        query = shopping_query_template.format(
+            product_description = content.get('description'),
+            brand = content.get('brand_name') or item.get('competitor_brand_name') or item.get('competitor_name'),
+            part_number = content.get('product_number') or '',
+            sku = content.get('sku') or ''
+        )
+    else:
+        query = query_template.format(
+            brand_name = item.get('competitor_brand_name') or item.get('competitor_name'),
+            major = item.get('major'),
+            minor = item.get('minor'),
+            long_desc = item.get('long_desc'),
+            company_num = item.get('competitor_cross-list_part_number'), #AK Fixed 15.06.2024
+            website = item.get('competitor_web_domain') or ""
+        )
     return query
 
 
@@ -553,7 +588,23 @@ def filter_sources(search_results: dict) -> dict:
     save_result(search_results, file_to_save_filtered)
     
     return search_results
-    
+
+
+# add shopping search results 
+def add_shopping_results(item: dict) -> None:
+    shopping_query = get_query(
+        item,
+        template = 'shopping'
+    )
+    shopping_content = get_item_search_result(
+        query = shopping_query,
+        original_item = None,
+        content_types = ['shopping']
+    )
+    item['shopping_query'] = shopping_query
+    item['shopping'] = shopping_content['shopping']
+# get car models autozone # TODO 1908
+
     
 # function to return collected all results
 def all_results_with_page_content(search_results: dict, content_types:list) -> dict:
@@ -563,6 +614,7 @@ def all_results_with_page_content(search_results: dict, content_types:list) -> d
     for item in collected_items:
         for content_type in content_types:
             sources = item[content_type] or []
+            sources = sources[:serper_scrape_limit_by_result_position] # AK fix 19.06
             for source in sources:
                 print('\rpage N', count, end='')
                 count += 1
@@ -576,8 +628,9 @@ def all_results_with_page_content(search_results: dict, content_types:list) -> d
                         content_type: source
                     }
 
-                    page_data_dict = scrape_item(link)
+                    page_data_dict = scrape_item(link, source = source)
                     items_by_url[link].update(page_data_dict)
+                    add_shopping_results(items_by_url[link])
     
     print()
     final_schema = {
@@ -587,6 +640,68 @@ def all_results_with_page_content(search_results: dict, content_types:list) -> d
     
     save_result(final_schema, file_to_save_with_page_data)
     return final_schema
+
+
+def create_image_data(url: str) -> dict:
+    """
+    Helper function to create image data dictionary.
+    
+    Parameters:
+    url (str): The URL or file path of the image.
+    
+    Returns:
+    dict: Dictionary containing the image type and URL or base64 encoded string.
+    """
+    if url.startswith('http'):
+        return {
+            "type": "image_url",
+            "image_url": {
+                "url": url,
+            },
+        }
+    else:
+        with open(url, "rb") as image_file:
+            base64_image =  base64.b64encode(image_file.read()).decode('utf-8')
+            
+        return {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+            },
+        }
+
+def images_prompt(prompt: str, *urls: str) -> str:
+    """
+    Generate a response from a chat model using a prompt and multiple images.
+    
+    Parameters:
+    prompt (str): The text prompt to be sent to the model.
+    *urls (str): Variable length argument list of URLs or file paths for the images.
+    
+    Returns:
+    str: The content of the response generated by the model.
+    
+    The function checks if the image URLs start with 'http'. If they do, it uses them as is.
+    Otherwise, it reads the images from the provided file paths, encodes them to base64, 
+    and formats them appropriately. It then sends a chat completion request to the model
+    with the prompt and the images.
+    """
+    images = [create_image_data(url) for url in urls]
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    *images
+                ],
+            }
+        ]
+    )
+    
+    return response.choices[0].message.content
 
     
 ###################### The Main function
@@ -605,6 +720,9 @@ def main(
     
     print('Receiving page contents...')
     result_with_page_contents = all_results_with_page_content(search_results, content_types)
+    
+    # print('Starting images similarity...')
+    # enriched_results = image_similarity(result_with_page_contents) #TODO 19.06: write the function
     
     print("Finished!")
     return result_with_page_contents

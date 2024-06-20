@@ -1,0 +1,16 @@
+1)
+serper scraping counter
+openai request counter
+image similarity for 2 images(optional)
+
+2)
+get car models from autozone # max 1h
+themostat and car model 
+https://www.autozone.com/user/myVehicle
+edit query to search with car model
+
+3)
+run async code snippet
+
+
+meet 11:00-13:00(last 2 h)
