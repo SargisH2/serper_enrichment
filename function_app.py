@@ -2,7 +2,7 @@ import azure.functions as func
 import logging
 import pandas as pd
 import json
-from main import run_app
+from main_app import run_app
 from async_oai_sample.test_async import run_async_tasks
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
@@ -26,6 +26,7 @@ def car_parts_enrichment(req: func.HttpRequest) -> func.HttpResponse:
     result = json.dumps(func_result)
         
     return func.HttpResponse(result)
+
 
 @app.route(route="test_async_oai", methods=['POST'])
 async def test_async_oai(req: func.HttpRequest) -> func.HttpResponse:
