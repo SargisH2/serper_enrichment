@@ -539,7 +539,7 @@ def all_results_with_page_content(search_results: dict, content_types:list, gpt_
             for source in tqdm(sources):
                 metadata['gpt_requests'] += 1
                 try:
-                    gpt_resp =  get_product_unstructured_data_to_json(prooduct_json_schema, str(source))
+                    gpt_resp =  get_product_unstructured_data_to_json(prooduct_json_schema, str(source), gpt_model)
                 except:
                     gpt_resp = dict()
                     metadata['gpt_errors'] += 1
