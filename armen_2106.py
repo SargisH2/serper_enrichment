@@ -51,7 +51,7 @@ from tqdm import tqdm
 from typing import Literal
 from datetime import datetime
 from openai import OpenAI
-
+client = OpenAI()
 now = datetime.now() # get current timestamp
 current_timestamp = now.strftime('%y_%m_%d_%H_%M')
            
@@ -62,10 +62,9 @@ data_to_save_folder = f'files/results/saved_{current_timestamp}/'
 if not os.path.exists(data_to_save_folder):
     os.makedirs(data_to_save_folder)
 file_to_save_without_enrichment = data_to_save_folder + 'serper_collected.json'
-# file_to_save_filtered = data_to_save_folder + 'serper_collected_filtered.json'
+file_to_save_filtered = data_to_save_folder + 'serper_collected_filtered.json'
 file_to_save_enriched = data_to_save_folder + 'enrichment_results.json'
 file_to_save_with_page_data = data_to_save_folder + 'all_collected_results.json'
-
 
 data_to_read_folder = f'files/read/'
 table_file = data_to_read_folder + 'df_1106.xlsx' # table     ##### Ready To Run
@@ -74,17 +73,17 @@ all_data_file_from_motorad = data_to_read_folder + 'full_data_parts.json' # all 
 
 
 # read files
-def read_default_table():
-    initial_table = pd.read_excel(table_file, header=header_row)
-    
+initial_table = pd.read_excel(table_file, header=header_row)
 with open(all_data_file_from_motorad, 'r') as file:
     motorad_all_items = json.load(file)
     
     
 ###################### Serper and oai init
 ## serper options
+serper_scrape_limit_by_result_position = 2
 serper_base_url = "https://google.serper.dev/"
 content_types = ['search', 'images','shopping']
+serper_limit = 2 # Filter items to search wiith serper. Set to 0 to search all products
 
 # template for serper search. Used in function get_query. 
 query_template = """{brand_name} {major} {company_num} site:{website}"""
@@ -110,7 +109,9 @@ serper_headers = {
 
 ## oai options
 os.environ['OPENAI_API_KEY'] = os.environ['PROJECT_OAI_KEY']#################################################
-client = OpenAI()
+gpt_model = 'gpt-3.5-turbo'
+oai_key = os.environ['OPENAI_API_KEY']
+similarity_limit_by_source = 2
     
 
 ###################### Define functions
@@ -133,7 +134,7 @@ def scrape_url(url:str, method: Literal['jina', 'serper'] = 'jina')-> str:
 
 
 # function to read unstructured data and return structured
-def get_product_unstructured_data_to_json(schema, data, model)->dict: # AK
+def get_product_unstructured_data_to_json(schema, data, model = gpt_model)->dict: # AK
     system_message = (
         f"You are a data analyst API."
         f"Your task is to extract info about the main product from a raw text. Identify and extract only data releated to the main part."
@@ -141,6 +142,7 @@ def get_product_unstructured_data_to_json(schema, data, model)->dict: # AK
         f"(without using Markdown code blocks or any other formatting). "
         f"If you can't find required keys in the text, just use empty text or empty list as a default value in the schema. "
         f"The JSON schema should include: {schema}.")
+    client = OpenAI()
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -162,7 +164,6 @@ def scrape_item(
         source: dict, 
         schema: dict = prooduct_json_schema, 
         required_keys:list = required_keys,
-        gpt_model: str = 'gpt-3.5-turbo'
     ) -> tuple:
     results = {
         'jina_scrape': {},
@@ -177,8 +178,7 @@ def scrape_item(
         results['gpt_requests'] += 1
         jina_page_json = get_product_unstructured_data_to_json(
             schema= schema,
-            data = jina_page_text,
-            model= gpt_model
+            data = jina_page_text
         )
         results['jina_scrape'] = jina_page_json
     except:
@@ -197,8 +197,7 @@ def scrape_item(
         results['gpt_requests'] += 1
         serper_page_json = get_product_unstructured_data_to_json(
             schema= schema,
-            data = serper_page_text,
-            model= gpt_model
+            data = serper_page_text
         )
         results['serper_scrape'] = serper_page_json
     except:
@@ -463,7 +462,7 @@ def get_item_search_result(
 def get_all_items_search_results(
             items_to_search: list,
             content_types: list = content_types,
-            serper_limit: int = 2
+            serper_limit: int = serper_limit
         ) -> dict:
     """
     Search with Serper for all items and save the results in a JSON file.
@@ -525,7 +524,7 @@ def add_shopping_results(item: dict) -> int: # retuens requests count
 
     
 # function to return collected all results
-def all_results_with_page_content(search_results: dict, content_types:list, gpt_model:str = 'gpt-3.5-turbo', serper_scrape_limit_by_result_position:int = 2) -> dict:
+def all_results_with_page_content(search_results: dict, content_types:list) -> dict:
     collected_items =  search_results['collected']
     total = len(collected_items)
     metadata = search_results['metadata']
@@ -537,13 +536,7 @@ def all_results_with_page_content(search_results: dict, content_types:list, gpt_
             sources = item[content_type] or []
             sources = sources[:serper_scrape_limit_by_result_position] # AK fix 19.06
             for source in tqdm(sources):
-                metadata['gpt_requests'] += 1
-                try:
-                    gpt_resp =  get_product_unstructured_data_to_json(prooduct_json_schema, str(source))
-                except:
-                    gpt_resp = dict()
-                    metadata['gpt_errors'] += 1
-                    
+                gpt_resp =  get_product_unstructured_data_to_json(prooduct_json_schema, str(source))
                 source['gpt_response'] = gpt_resp
                 link = source['link'].split('?')[0].strip('/') # get url main part
                 
@@ -552,7 +545,7 @@ def all_results_with_page_content(search_results: dict, content_types:list, gpt_
                 serper_req_count = 0
                 for key in required_keys:
                     if not gpt_resp.get(key):
-                        scraping_result = scrape_item(link, source = source, gpt_model=gpt_model)
+                        scraping_result = scrape_item(link, source = source)
                         source.update({
                             'jina_scrape': scraping_result['jina_scrape'],
                             'serper_scrape': scraping_result['serper_scrape'],
@@ -583,7 +576,7 @@ def all_results_with_page_content(search_results: dict, content_types:list, gpt_
                     
     print()
     final_schema = {
-        'metadata': metadata,
+        'metadata': search_results['metadata'],
         'products': items_by_url
     }
     
@@ -619,7 +612,7 @@ def create_image_data(url: str) -> dict:
             },
         }
 
-def images_prompt(prompt: str, vision_model:str, *urls: str) -> str:
+def images_prompt(prompt: str, *urls: str) -> str:
     """
     Generate a response from a chat model using a prompt and multiple images.
     
@@ -638,7 +631,7 @@ def images_prompt(prompt: str, vision_model:str, *urls: str) -> str:
     images = [create_image_data(url) for url in urls]
 
     response = client.chat.completions.create(
-        model=vision_model,
+        model="gpt-4o",
         messages=[
             {
                 "role": "user",
@@ -654,7 +647,7 @@ def images_prompt(prompt: str, vision_model:str, *urls: str) -> str:
 
 
 # function tf rcomparing images
-def image_similarity(result_with_page_contents, content_types_for_simil, vision_model):
+def image_similarity(result_with_page_contents, content_types_for_simil):
     metadata = result_with_page_contents['metadata']
     for item in result_with_page_contents['products'].values(): # keys are links
         original_image = item['original'].get('angle_view')
@@ -662,6 +655,7 @@ def image_similarity(result_with_page_contents, content_types_for_simil, vision_
         original_image = original_image.replace('images/', 'https://images.motorad.com/MotoRad-stills/')
         for source_type in content_types_for_simil:
             sources = item.get(source_type) or []
+            sources = sources[:similarity_limit_by_source]
             for source in sources:
                 source_image = source.get('imageUrl')
                 if not (source_image and source.get('matches')): continue
@@ -670,7 +664,6 @@ def image_similarity(result_with_page_contents, content_types_for_simil, vision_
                 try:
                     simil_result = images_prompt(
                         img_similarity_prompt, 
-                        vision_model,
                         original_image, source_image
                     )
                     img_similarity_result = json.loads(
@@ -686,27 +679,24 @@ def image_similarity(result_with_page_contents, content_types_for_simil, vision_
     
 ###################### The Main function
 def run_app(
-        table:pd.DataFrame = None,
-        serper_limit:int = 2,
-        content_types:list = content_types,
-        gpt_model:str = 'gpt-3.5-turbo',
-        vision_model:str = 'gpt-4o',
-        serper_scrape_limit_by_result_position:int = 2,
-    ) -> dict: 
+        serper_limit:int = serper_limit,
+        content_types:list = content_types
+    ) -> dict:
     print("Merging table and json...")
-    if not isinstance(table, pd.DataFrame):
-        table = read_default_table()
-    merged_data = merge_table_and_json(table)
+    merged_data = merge_table_and_json(initial_table)
     
     print('Serper requests...')
     search_results = get_all_items_search_results(merged_data, content_types, serper_limit=serper_limit)
     
     print('Receiving page contents...')
-    result_with_page_contents = all_results_with_page_content(search_results, content_types, gpt_model, serper_scrape_limit_by_result_position)
+    result_with_page_contents = all_results_with_page_content(search_results, content_types)
     
     print('Starting images similarity...')
-    enriched_results = image_similarity(result_with_page_contents, content_types, vision_model)
+    enriched_results = image_similarity(result_with_page_contents, content_types+['shopping'])
     
     print("Finished!")
     return enriched_results 
     
+####
+# result = run_app()
+# print(result['metadata'])
