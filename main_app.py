@@ -58,13 +58,13 @@ current_timestamp = now.strftime('%y_%m_%d_%H_%M')
     
 ###################### Work with files
 # init folders and files
-data_to_save_folder = f'files/results/saved_{current_timestamp}/'
-if not os.path.exists(data_to_save_folder):
-    os.makedirs(data_to_save_folder)
-file_to_save_without_enrichment = data_to_save_folder + 'serper_collected.json'
-# file_to_save_filtered = data_to_save_folder + 'serper_collected_filtered.json'
-file_to_save_enriched = data_to_save_folder + 'enrichment_results.json'
-file_to_save_with_page_data = data_to_save_folder + 'all_collected_results.json'
+# data_to_save_folder = f'files/results/saved_{current_timestamp}/'
+# if not os.path.exists(data_to_save_folder):
+#     os.makedirs(data_to_save_folder)
+# file_to_save_without_enrichment = data_to_save_folder + 'serper_collected.json'
+# # file_to_save_filtered = data_to_save_folder + 'serper_collected_filtered.json'
+# file_to_save_enriched = data_to_save_folder + 'enrichment_results.json'
+# file_to_save_with_page_data = data_to_save_folder + 'all_collected_results.json'
 
 
 data_to_read_folder = f'files/read/'
@@ -74,8 +74,8 @@ all_data_file_from_motorad = data_to_read_folder + 'full_data_parts.json' # all 
 
 
 # read files
-def read_default_table():
-    initial_table = pd.read_excel(table_file, header=header_row)
+# def read_default_table():
+#     initial_table = pd.read_excel(table_file, header=header_row)
     
 with open(all_data_file_from_motorad, 'r') as file:
     motorad_all_items = json.load(file)
@@ -212,16 +212,16 @@ def save_result(
         data: dict, 
         path: str
     ) -> None:
-    """
-    Save collected results to a JSON file.
+    # """
+    # Save collected results to a JSON file.
 
-    Args:
-    data (dict): dict with metadata and a list of collected results.
-    path (str): Path to save the JSON file.
-    """
-    with open(path, 'w', encoding = 'utf-8') as file:
-        json.dump(data, file, indent=4)
-    print(f'Saved {path}')
+    # Args:
+    # data (dict): dict with metadata and a list of collected results.
+    # path (str): Path to save the JSON file.
+    # """
+    # with open(path, 'w', encoding = 'utf-8') as file:
+    #     json.dump(data, file, indent=4)
+    print(f'Saved {path} (NO)')
     
 
 # find item in motorad products by the part number
@@ -503,7 +503,7 @@ def get_all_items_search_results(
         'metadata': metadata,
         'collected': collected
     }
-    save_result(final_results, file_to_save_without_enrichment)
+    # save_result(final_results, file_to_save_without_enrichment)
     
     return final_results
 
@@ -587,7 +587,7 @@ def all_results_with_page_content(search_results: dict, content_types:list, gpt_
         'products': items_by_url
     }
     
-    save_result(final_schema, file_to_save_with_page_data)
+    # save_result(final_schema, file_to_save_with_page_data)
     return final_schema
 
 
@@ -680,7 +680,7 @@ def image_similarity(result_with_page_contents, content_types_for_simil, vision_
                     source.update(img_similarity_result)
                 except:
                     metadata['gpt_errors'] += 1
-    save_result(result_with_page_contents, file_to_save_enriched)
+    # save_result(result_with_page_contents, file_to_save_enriched)
     return result_with_page_contents
                 
     
@@ -694,8 +694,8 @@ def run_app(
         serper_scrape_limit_by_result_position:int = 2,
     ) -> dict: 
     print("Merging table and json...")
-    if not isinstance(table, pd.DataFrame):
-        table = read_default_table()
+    # if not isinstance(table, pd.DataFrame):
+    #     table = read_default_table()
     merged_data = merge_table_and_json(table)
     
     print('Serper requests...')
@@ -704,9 +704,9 @@ def run_app(
     print('Receiving page contents...')
     result_with_page_contents = all_results_with_page_content(search_results, content_types, gpt_model, serper_scrape_limit_by_result_position)
     
-    print('Starting images similarity...')
-    enriched_results = image_similarity(result_with_page_contents, content_types, vision_model)
+    # print('Starting images similarity...')
+    # enriched_results = image_similarity(result_with_page_contents, content_types, vision_model)
     
     print("Finished!")
-    return enriched_results 
+    return result_with_page_contents 
     
