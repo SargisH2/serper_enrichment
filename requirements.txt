@@ -4,4 +4,4 @@ tqdm
 openai
 openpyxl
 fastapi
-uvicorn
+gunicorn
